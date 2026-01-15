@@ -5,18 +5,47 @@ load_dotenv()
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
 CATEGORY_MAP = {
-    "FOOD": ["food_bank", "supermarket"],
-    "SHELTER": ["lodging"],
-    "MEDICAL": ["hospital", "doctor", "pharmacy"],
-    "MENTAL_HEALTH": ["psychologist", "health"],
-    "COMMUNITY_NGOS": ["local_government_office", "community_center"],
-    "RETIREMENT_HOMES": ["nursing_home"],
-    "FINANCIAL": ["bank", "atm"],
-    "LEGAL": ["courthouse", "lawyer"],
-    "EDUCATION": ["school", "university", "library"],
-    "TRANSPORTATION": ["bus_station", "taxi_stand"],
-    "EMERGENCY": ["police", "fire_station", "hospital"],
+    "FOOD": {
+        "types": ["grocery_or_supermarket", "supermarket", "store", "meal_takeaway"],
+        "keywords": ["grocery", "kirana", "provision", "food", "mart"]
+    },
+    "SHELTER": {
+        "types": ["lodging"],
+        "keywords": ["hostel", "shelter", "night stay"]
+    },
+    "MEDICAL": {
+        "types": ["hospital", "doctor", "pharmacy", "clinic"],
+        "keywords": ["clinic", "medical", "hospital"]
+    },
+    "MENTAL_HEALTH": {
+        "types": ["psychologist", "health"],
+        "keywords": ["counseling", "mental", "therapy"]
+    },
+    "COMMUNITY_NGOS": {
+        "types": ["community_center"],
+        "keywords": ["ngo", "community", "charity"]
+    },
+    "FINANCIAL": {
+        "types": ["bank", "atm"],
+        "keywords": ["bank", "finance"]
+    },
+    "LEGAL": {
+        "types": ["lawyer", "courthouse"],
+        "keywords": ["legal", "lawyer", "advocate"]
+    },
+    "TRANSPORTATION": {
+        "types": ["bus_station", "train_station", "taxi_stand"],
+        "keywords": ["bus", "taxi", "train"]
+    },
+    "EMERGENCY": {
+        "types": ["hospital", "police", "fire_station"],
+        "keywords": ["emergency", "help"]
+    }
 }
+
+BAD_KEYWORDS = [
+    "bank", "atm", "toilet", "studio", "export", "office", "gas", "government"
+]
 
 def haversine(lat1, lon1, lat2, lon2):
     R = 6371
@@ -25,21 +54,46 @@ def haversine(lat1, lon1, lat2, lon2):
     a = math.sin(d_lat/2)**2 + math.cos(math.radians(lat1))*math.cos(math.radians(lat2))*math.sin(d_lon/2)**2
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
 
-def find_places(latitude, longitude, category):
-    types = CATEGORY_MAP.get(category, [])
-    results = []
+def fetch_details(pid):
+    url = f"https://maps.googleapis.com/maps/api/place/details/json?place_id={pid}&fields=formatted_phone_number,rating,user_ratings_total,opening_hours,geometry&key={GOOGLE_API_KEY}"
+    return requests.get(url).json().get("result", {})
 
-    for t in types:
-        url = f"https://maps.googleapis.com/maps/api/place/nearbysearch/json?location={latitude},{longitude}&radius=7000&type={t}&key={GOOGLE_API_KEY}"
-        r = requests.get(url).json()
+def find_places(lat, lon, category):
+    config = CATEGORY_MAP.get(category, None)
+    if not config:
+        return []
 
-        for p in r.get("results", []):
-            dist = haversine(latitude, longitude, p["geometry"]["location"]["lat"], p["geometry"]["location"]["lng"])
-            results.append({
-                "name": p.get("name"),
-                "address": p.get("vicinity"),
-                "distance_km": round(dist, 2),
-            })
+    results = {}
+    for t in config["types"]:
+        for kw in config["keywords"]:
+            url = (
+                f"https://maps.googleapis.com/maps/api/place/nearbysearch/json?"
+                f"location={lat},{lon}&radius=6000&type={t}&keyword={kw}&key={GOOGLE_API_KEY}"
+            )
+            data = requests.get(url).json()
 
-    results.sort(key=lambda x: x["distance_km"])
-    return results[:10]
+            for p in data.get("results", []):
+                name = p.get("name", "").lower()
+
+                if any(b in name for b in BAD_KEYWORDS):
+                    continue
+
+                pid = p["place_id"]
+                if pid not in results:
+                    details = fetch_details(pid)
+                    end = details.get("geometry", {}).get("location", {})
+                    dist = haversine(lat, lon, end.get("lat", lat), end.get("lng", lon))
+
+                    results[pid] = {
+                        "name": p.get("name"),
+                        "address": p.get("vicinity"),
+                        "distance_km": round(dist, 2),
+                        "rating": details.get("rating"),
+                        "reviews": details.get("user_ratings_total"),
+                        "phone": details.get("formatted_phone_number"),
+                        "open_now": p.get("opening_hours", {}).get("open_now") if p.get("opening_hours") else None,
+                        "maps_url": f"https://www.google.com/maps/dir/?api=1&destination={end.get('lat')},{end.get('lng')}"
+                    }
+
+    cleaned = sorted(results.values(), key=lambda x: x["distance_km"])
+    return cleaned[:10]

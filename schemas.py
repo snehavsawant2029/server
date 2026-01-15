@@ -1,10 +1,15 @@
 from pydantic import BaseModel
 from typing import List, Optional
 
+class ChatMessage(BaseModel):
+    role: str   # "user" or "assistant"
+    content: str
+
 class ChatRequest(BaseModel):
-    message: str
+    messages: List[ChatMessage]
     latitude: float
     longitude: float
+    age_group: str   # "0-3", "4-9", "10-12", "13-17", "18+"
 
 class ChatResponse(BaseModel):
     reply: str
@@ -19,6 +24,10 @@ class Place(BaseModel):
     address: str
     distance_km: float
     phone: Optional[str] = None
+    rating: Optional[float] = None
+    reviews: Optional[int] = None
+    open_now: Optional[bool] = None
+    maps_url: Optional[str] = None   # NEW — for Google Maps directions
 
 class DiscoverResponse(BaseModel):
     places: List[Place]
