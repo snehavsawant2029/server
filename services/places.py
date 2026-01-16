@@ -1,51 +1,31 @@
-import requests, os, math
-from dotenv import load_dotenv
-load_dotenv()
+# services/places.py
 
+import os, math, asyncio
+import httpx
+from dotenv import load_dotenv
+
+load_dotenv()
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
 CATEGORY_MAP = {
-    "FOOD": {
-        "types": ["grocery_or_supermarket", "supermarket", "store", "meal_takeaway"],
-        "keywords": ["grocery", "kirana", "provision", "food", "mart"]
-    },
-    "SHELTER": {
-        "types": ["lodging"],
-        "keywords": ["hostel", "shelter", "night stay"]
-    },
-    "MEDICAL": {
-        "types": ["hospital", "doctor", "pharmacy", "clinic"],
-        "keywords": ["clinic", "medical", "hospital"]
-    },
-    "MENTAL_HEALTH": {
-        "types": ["psychologist", "health"],
-        "keywords": ["counseling", "mental", "therapy"]
-    },
-    "COMMUNITY_NGOS": {
-        "types": ["community_center"],
-        "keywords": ["ngo", "community", "charity"]
-    },
-    "FINANCIAL": {
-        "types": ["bank", "atm"],
-        "keywords": ["bank", "finance"]
-    },
-    "LEGAL": {
-        "types": ["lawyer", "courthouse"],
-        "keywords": ["legal", "lawyer", "advocate"]
-    },
-    "TRANSPORTATION": {
-        "types": ["bus_station", "train_station", "taxi_stand"],
-        "keywords": ["bus", "taxi", "train"]
-    },
-    "EMERGENCY": {
-        "types": ["hospital", "police", "fire_station"],
-        "keywords": ["emergency", "help"]
-    }
+    "FOOD": ["grocery_or_supermarket", "supermarket"],
+    "SHELTER": ["lodging"],
+    "MEDICAL": ["hospital", "doctor", "clinic", "pharmacy"],
+    "MENTAL_HEALTH": ["psychologist", "health"],
+    "COMMUNITY_NGOS": ["community_center"],
+    "FINANCIAL": ["bank", "atm"],
+    "LEGAL": ["lawyer", "courthouse"],
+    "TRANSPORTATION": ["bus_station", "train_station"],
+    "EMERGENCY": ["hospital", "police", "fire_station"],
 }
 
-BAD_KEYWORDS = [
-    "bank", "atm", "toilet", "studio", "export", "office", "gas", "government"
-]
+NEEDY_FALLBACK = {
+    "FOOD": ["food bank", "food pantry", "free food", "community kitchen"],
+    "SHELTER": ["homeless shelter", "night shelter"],
+    "MEDICAL": ["free clinic", "public health clinic"],
+}
+
+BAD_KEYWORDS = ["atm", "studio", "export", "office", "toilet"]
 
 def haversine(lat1, lon1, lat2, lon2):
     R = 6371
@@ -54,35 +34,58 @@ def haversine(lat1, lon1, lat2, lon2):
     a = math.sin(d_lat/2)**2 + math.cos(math.radians(lat1))*math.cos(math.radians(lat2))*math.sin(d_lon/2)**2
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
 
-def fetch_details(pid):
-    url = f"https://maps.googleapis.com/maps/api/place/details/json?place_id={pid}&fields=formatted_phone_number,rating,user_ratings_total,opening_hours,geometry&key={GOOGLE_API_KEY}"
-    return requests.get(url).json().get("result", {})
+async def fetch_json(client, url):
+    try:
+        r = await client.get(url)
+        return r.json()
+    except:
+        return {}
 
-def find_places(lat, lon, category):
-    config = CATEGORY_MAP.get(category, None)
-    if not config:
-        return []
+async def fetch_details(client, pid):
+    url = (
+        f"https://maps.googleapis.com/maps/api/place/details/json?"
+        f"place_id={pid}&fields=formatted_phone_number,rating,user_ratings_total,opening_hours,geometry&key={GOOGLE_API_KEY}"
+    )
+    return (await fetch_json(client, url)).get("result", {})
 
+async def find_places(lat, lon, category):
     results = {}
-    for t in config["types"]:
-        for kw in config["keywords"]:
-            url = (
-                f"https://maps.googleapis.com/maps/api/place/nearbysearch/json?"
-                f"location={lat},{lon}&radius=6000&type={t}&keyword={kw}&key={GOOGLE_API_KEY}"
-            )
-            data = requests.get(url).json()
+    types = CATEGORY_MAP.get(category, [])
+    fallbacks = NEEDY_FALLBACK.get(category, [])
 
+    queries = [{"type": t, "keyword": None} for t in types] + \
+              [{"type": None, "keyword": kw} for kw in fallbacks]
+
+    # Add a very soft fallback so results never empty
+    if category == "FOOD":
+        queries.append({"type": None, "keyword": "restaurant"})
+
+    base = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
+    async with httpx.AsyncClient(timeout=6.0) as client:
+        tasks = []
+        for q in queries:
+            url = (
+                f"{base}?location={lat},{lon}&radius=6000&key={GOOGLE_API_KEY}"
+            )
+            if q["type"]:
+                url += f"&type={q['type']}"
+            if q["keyword"]:
+                url += f"&keyword={q['keyword']}"
+            tasks.append(fetch_json(client, url))
+
+        responses = await asyncio.gather(*tasks)
+
+        for data in responses:
             for p in data.get("results", []):
                 name = p.get("name", "").lower()
-
                 if any(b in name for b in BAD_KEYWORDS):
                     continue
 
                 pid = p["place_id"]
                 if pid not in results:
-                    details = fetch_details(pid)
-                    end = details.get("geometry", {}).get("location", {})
-                    dist = haversine(lat, lon, end.get("lat", lat), end.get("lng", lon))
+                    details = await fetch_details(client, pid)
+                    loc = details.get("geometry", {}).get("location", {})
+                    dist = haversine(lat, lon, loc.get("lat", lat), loc.get("lng", lon))
 
                     results[pid] = {
                         "name": p.get("name"),
@@ -92,8 +95,7 @@ def find_places(lat, lon, category):
                         "reviews": details.get("user_ratings_total"),
                         "phone": details.get("formatted_phone_number"),
                         "open_now": p.get("opening_hours", {}).get("open_now") if p.get("opening_hours") else None,
-                        "maps_url": f"https://www.google.com/maps/dir/?api=1&destination={end.get('lat')},{end.get('lng')}"
+                        "maps_url": f"https://www.google.com/maps/dir/?api=1&destination={loc.get('lat')},{loc.get('lng')}"
                     }
 
-    cleaned = sorted(results.values(), key=lambda x: x["distance_km"])
-    return cleaned[:10]
+    return sorted(results.values(), key=lambda x: x["distance_km"])[:10]

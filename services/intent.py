@@ -1,10 +1,12 @@
+# services/intent.py
+
 def classify_service_type(message: str) -> str:
     message = message.lower()
 
     KEYWORDS = {
-        "FOOD": ["food", "eat", "meal", "grocery", "ration", "hungry"],
-        "SHELTER": ["shelter", "sleep", "stay", "bed", "rest"],
-        "MEDICAL": ["hospital", "doctor", "clinic", "medicine", "injury", "help", "health"],
+        "FOOD": ["food", "eat", "meal", "grocery", "ration", "hungry", "pantry", "food bank"],
+        "SHELTER": ["shelter", "sleep", "stay", "bed", "homeless"],
+        "MEDICAL": ["hospital", "doctor", "clinic", "medicine", "health", "injury"],
         "MENTAL_HEALTH": ["mental", "counsel", "therapy", "stress", "anxiety", "depression"],
         "FINANCIAL": ["money", "loan", "finance", "bank"],
         "LEGAL": ["lawyer", "legal", "court", "advocate"],
@@ -12,7 +14,7 @@ def classify_service_type(message: str) -> str:
         "COMMUNITY_NGOS": ["ngo", "community", "charity"],
         "RETIREMENT_HOMES": ["old age", "senior", "retire"],
         "TRANSPORTATION": ["bus", "train", "taxi", "transport"],
-        "EMERGENCY": ["emergency", "police", "fire", "ambulance"]
+        "EMERGENCY": ["emergency", "police", "fire", "ambulance"],
     }
 
     for category, keys in KEYWORDS.items():
