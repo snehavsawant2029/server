@@ -7,25 +7,70 @@ from dotenv import load_dotenv
 load_dotenv()
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
+RADIUS_TIERS = [3000, 8000, 20000]
+
 CATEGORY_MAP = {
-    "FOOD": ["grocery_or_supermarket", "supermarket"],
-    "SHELTER": ["lodging"],
-    "MEDICAL": ["hospital", "doctor", "clinic", "pharmacy"],
-    "MENTAL_HEALTH": ["psychologist", "health"],
-    "COMMUNITY_NGOS": ["community_center"],
-    "FINANCIAL": ["bank", "atm"],
-    "LEGAL": ["lawyer", "courthouse"],
-    "TRANSPORTATION": ["bus_station", "train_station"],
-    "EMERGENCY": ["hospital", "police", "fire_station"],
+    "FOOD": [
+        "food_bank",
+        "meal_delivery",
+        "community_center",
+        "supermarket"
+    ],
+    "MEDICAL": [
+        "clinic",
+        "doctor",
+        "dentist",
+        "hospital",
+        "pharmacy",
+        "psychologist"
+    ],
+    "SHELTER": [
+        "homeless_shelter",
+        "lodging",
+        "local_government_office"
+    ],
+    "EDUCATION": [
+        "school",
+        "university",
+        "library"
+    ],
+    "FINANCIAL": [
+        "bank",
+        "credit_union",
+        "atm"
+    ],
+    "COMMUNITY_NGOS": [
+        "community_center",
+        "church",
+        "mosque",
+        "hindu_temple",
+        "synagogue",
+        "park"
+    ],
+    "LEGAL": [
+        "lawyer",
+        "courthouse",
+        "local_government_office",
+        "embassy"
+    ],
+    "MENTAL_HEALTH": [
+        "psychologist",
+        "drug_rehab",
+        "health"
+    ],
+    "TRANSPORTATION": [
+        "bus_station",
+        "train_station",
+        "taxi_stand"
+    ],
+    "EMERGENCY": [
+        "hospital",
+        "police",
+        "fire_station"
+    ]
 }
 
-NEEDY_FALLBACK = {
-    "FOOD": ["food bank", "food pantry", "free food", "community kitchen"],
-    "SHELTER": ["homeless shelter", "night shelter"],
-    "MEDICAL": ["free clinic", "public health clinic"],
-}
-
-BAD_KEYWORDS = ["atm", "studio", "export", "office", "toilet"]
+BAD_KEYWORDS = ["export", "studio", "luxury", "spa"]
 
 def haversine(lat1, lon1, lat2, lon2):
     R = 6371
@@ -48,54 +93,47 @@ async def fetch_details(client, pid):
     )
     return (await fetch_json(client, url)).get("result", {})
 
+async def tier_search(client, lat, lon, types, radius):
+    tasks = []
+    base = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
+    for t in types:
+        url = f"{base}?location={lat},{lon}&radius={radius}&key={GOOGLE_API_KEY}&type={t}"
+        tasks.append(fetch_json(client, url))
+    return await asyncio.gather(*tasks)
+
 async def find_places(lat, lon, category):
     results = {}
     types = CATEGORY_MAP.get(category, [])
-    fallbacks = NEEDY_FALLBACK.get(category, [])
 
-    queries = [{"type": t, "keyword": None} for t in types] + \
-              [{"type": None, "keyword": kw} for kw in fallbacks]
-
-    # Add a very soft fallback so results never empty
-    if category == "FOOD":
-        queries.append({"type": None, "keyword": "restaurant"})
-
-    base = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
     async with httpx.AsyncClient(timeout=6.0) as client:
-        tasks = []
-        for q in queries:
-            url = (
-                f"{base}?location={lat},{lon}&radius=6000&key={GOOGLE_API_KEY}"
-            )
-            if q["type"]:
-                url += f"&type={q['type']}"
-            if q["keyword"]:
-                url += f"&keyword={q['keyword']}"
-            tasks.append(fetch_json(client, url))
+        for radius in RADIUS_TIERS:
+            responses = await tier_search(client, lat, lon, types, radius)
 
-        responses = await asyncio.gather(*tasks)
+            for data in responses:
+                for p in data.get("results", []):
+                    name = p.get("name", "").lower()
+                    if any(b in name for b in BAD_KEYWORDS):
+                        continue
 
-        for data in responses:
-            for p in data.get("results", []):
-                name = p.get("name", "").lower()
-                if any(b in name for b in BAD_KEYWORDS):
-                    continue
+                    pid = p["place_id"]
+                    if pid not in results:
+                        details = await fetch_details(client, pid)
+                        loc = details.get("geometry", {}).get("location", {})
+                        dist = haversine(lat, lon, loc.get("lat", lat), loc.get("lng", lon))
 
-                pid = p["place_id"]
-                if pid not in results:
-                    details = await fetch_details(client, pid)
-                    loc = details.get("geometry", {}).get("location", {})
-                    dist = haversine(lat, lon, loc.get("lat", lat), loc.get("lng", lon))
+                        results[pid] = {
+                            "name": p.get("name"),
+                            "address": p.get("vicinity"),
+                            "distance_km": round(dist, 2),
+                            "rating": details.get("rating"),
+                            "reviews": details.get("user_ratings_total"),
+                            "phone": details.get("formatted_phone_number"),
+                            "open_now": details.get("opening_hours", {}).get("open_now") if details.get("opening_hours") else None,
+                            "maps_url": f"https://www.google.com/maps/dir/?api=1&destination={loc.get('lat')},{loc.get('lng')}"
+                        }
 
-                    results[pid] = {
-                        "name": p.get("name"),
-                        "address": p.get("vicinity"),
-                        "distance_km": round(dist, 2),
-                        "rating": details.get("rating"),
-                        "reviews": details.get("user_ratings_total"),
-                        "phone": details.get("formatted_phone_number"),
-                        "open_now": p.get("opening_hours", {}).get("open_now") if p.get("opening_hours") else None,
-                        "maps_url": f"https://www.google.com/maps/dir/?api=1&destination={loc.get('lat')},{loc.get('lng')}"
-                    }
+            # stop early if enough results
+            if len(results) >= 8:
+                break
 
     return sorted(results.values(), key=lambda x: x["distance_km"])[:10]
