@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from typing import List, Optional
 
 class ChatMessage(BaseModel):
@@ -28,6 +28,12 @@ class Place(BaseModel):
     reviews: Optional[int] = None
     open_now: Optional[bool] = None
     maps_url: Optional[str] = None   # NEW — for Google Maps directions
+
+class ContactRequest(BaseModel):
+    name: str
+    email: EmailStr
+    subject: str
+    message: str
 
 class DiscoverResponse(BaseModel):
     places: List[Place]
