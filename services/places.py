@@ -18,12 +18,12 @@ CATEGORY_CONFIG = {
     "MEDICAL": {
         "keywords": ["free clinic", "community health center", "public health clinic"],
         "types": ["hospital", "pharmacy"],
-        "required_terms": ["clinic", "health", "hospital", "medical", "dental", "pharmacy", "doctor"]
+        "required_terms": ["free clinic", "public hospital"]
     },
     "SHELTER": {
         "keywords": ["homeless shelter", "emergency shelter", "family shelter"],
         "types": [],
-        "required_terms": ["shelter", "housing", "mission", "refuge", "haven"]
+        "required_terms": ["homeless shelter", "housing", "mission", "refuge", "haven"]
     },
     "EDUCATION": {
         "keywords": ["public library", "community college", "adult education"],
@@ -239,11 +239,12 @@ async def find_places(lat, lon, category):
                         continue
                     
                     dist = haversine(lat, lon, loc.get("lat", lat), loc.get("lng", lon))
+                    dist_miles = dist*0.621371
                     
                     results[pid] = {
                         "name": p.get("name"),
                         "address": p.get("formatted_address", p.get("vicinity")),
-                        "distance_km": round(dist, 2),
+                        "distance_miles": round(dist_miles, 2),
                         "rating": details.get("rating"),
                         "reviews": details.get("user_ratings_total"),
                         "phone": details.get("formatted_phone_number"),
@@ -256,7 +257,7 @@ async def find_places(lat, lon, category):
                 break
         
         # Sort by distance
-        sorted_results = sorted(results.values(), key=lambda x: x["distance_km"])
+        sorted_results = sorted(results.values(), key=lambda x: x["distance_miles"])
         
         # Priority sorting for specific categories
         if category in ["FOOD", "SHELTER", "LEGAL", "MENTAL_HEALTH"]:

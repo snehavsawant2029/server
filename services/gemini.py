@@ -47,20 +47,20 @@ def generate_reply(messages, location_info, places, age_group, service_type):
                 # Only name and address - NO phone or directions
                 place_list.append(
                     f"**{i}. {p['name']}**{rating}{open_status}  \n"
-                    f"📍 {p['address']} ({p['distance_km']} km away)"
+                    f"📍 {p['address']} ({p['distance_miles']} km away)"
                 )
             elif age_group == "10-12":
                 # Full info including directions, but will ask parent to go with them
                 place_list.append(
                     f"**{i}. {p['name']}**{rating}{open_status}  \n"
-                    f"📍 {p['address']} ({p['distance_km']} km away){phone}  \n"
+                    f"📍 {p['address']} ({p['distance_miles']} km away){phone}  \n"
                     f"🗺️ [Get Directions]({p['maps_url']})"
                 )
             else:  # 13-17 and 18+
                 # Full information
                 place_list.append(
                     f"**{i}. {p['name']}**{rating}{open_status}  \n"
-                    f"📍 {p['address']} ({p['distance_km']} km away){phone}  \n"
+                    f"📍 {p['address']} ({p['distance_miles']} km away){phone}  \n"
                     f"🗺️ [Get Directions]({p['maps_url']})"
                 )
         

@@ -1,16 +1,16 @@
-# CareConnect AI - Backend API
+# Sahayu - Backend API
 
-A FastAPI-based backend service that powers CareConnect AI, providing location-based service discovery, AI-powered chat assistance, and intelligent categorization of support services.
+A FastAPI-based backend service that powers Sahayu, providing location-based service discovery, AI-powered chat assistance, and intelligent categorization of support services.
 
 ## 🔗 Related Repositories
 
 **Frontend Application**: https://github.com/snehavsawant2029/care-connect-ai
 
-This backend API serves the CareConnect AI frontend with all data processing, external API integrations, and AI-powered recommendations.
+This backend API serves the Sahayu frontend with all data processing, external API integrations, and AI-powered recommendations.
 
 ## 📋 What This API Does
 
-CareConnect AI Backend provides:
+Sahayu Backend provides:
 
 - **AI-Powered Chat**: Context-aware conversational AI using Google Gemini for personalized assistance
 - **Service Discovery**: Integration with Google Places API to find nearby support services
@@ -72,7 +72,7 @@ CareConnect AI Backend provides:
 
 ```bash
 git clone <your-repository-url>
-cd careconnect-backend
+cd Sahayu-backend
 ```
 
 ### 2. Create Virtual Environment
@@ -160,7 +160,7 @@ SMTP_SERVER=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USERNAME=your_email@gmail.com
 SMTP_PASSWORD=your_app_specific_password
-CONTACT_EMAIL=contact@careconnectai.com
+CONTACT_EMAIL=contact@Sahayuai.com
 
 # Server Configuration (Optional)
 HOST=0.0.0.0
@@ -229,7 +229,7 @@ uvicorn main:app --reload --access-log
 ## 📁 Project Structure
 
 ```
-careconnect-backend/
+Sahayu-backend/
 ├── main.py                 # FastAPI application entry point
 ├── schemas.py             # Pydantic models for request/response
 ├── services/              # Business logic modules
@@ -433,7 +433,7 @@ git push heroku main
 
 For issues and questions:
 - Open an issue on GitHub
-- Contact: contact@careconnectai.com
+- Contact: contact@Sahayuai.com
 
 ## 🙏 Acknowledgments
 

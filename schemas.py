@@ -22,7 +22,7 @@ class DiscoverRequest(BaseModel):
 class Place(BaseModel):
     name: str
     address: str
-    distance_km: float
+    distance_miles: float
     phone: Optional[str] = None
     rating: Optional[float] = None
     reviews: Optional[int] = None
